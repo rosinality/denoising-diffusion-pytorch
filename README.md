@@ -15,3 +15,10 @@ Then run training looop!
 ```bash
 python train.py --n_gpu [NUMBER OF GPUS FOR TRAINING] --conf diffusion.conf 
 ```
+
+## Samples
+
+Samples from FFHQ
+
+![Samples from FFHQ 1](doc/diffusion1.png)
+![Samples from FFHQ 2](doc/diffusion2.png)
