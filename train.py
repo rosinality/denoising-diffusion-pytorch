@@ -140,9 +140,6 @@ def main(conf):
     betas = make_beta_schedule(beta_schedule, beta_start, beta_end, n_timestep)
     diffusion = GaussianDiffusion(betas).to(device)
 
-    if dist.is_primary():
-        bind_model(conf, model, ema, scheduler)
-
     train(conf, train_loader, model, ema, diffusion, optimizer, scheduler, device)
 
 
