@@ -4,7 +4,7 @@ import torch
 from torch import nn, optim
 from torch.utils import data
 from torchvision import transforms
-from tensorfn import load_arg_config
+from tensorfn import load_arg_config, load_wandb
 from tensorfn import distributed as dist
 from tensorfn.optim import lr_scheduler
 from tqdm import tqdm
@@ -38,7 +38,7 @@ def accumulate(model1, model2, decay=0.9999):
         par1[k].data.mul_(decay).add_(par2[k].data, alpha=1 - decay)
 
 
-def train(conf, loader, model, ema, diffusion, optimizer, scheduler, device):
+def train(conf, loader, model, ema, diffusion, optimizer, scheduler, device, wandb):
     loader = sample_data(loader)
 
     pbar = range(conf.training.n_iter + 1)
@@ -69,6 +69,9 @@ def train(conf, loader, model, ema, diffusion, optimizer, scheduler, device):
                 f"epoch: {epoch}; loss: {loss.item():.4f}; lr: {lr:.5f}"
             )
 
+            if i % conf.evaluate.log_every == 0:
+                wandb.log({"epoch": epoch, "loss": loss.item(), "lr": lr}, step=i)
+
             if i % conf.evaluate.save_every == 0:
                 if conf.distributed:
                     model_module = model.module
@@ -88,6 +91,11 @@ def train(conf, loader, model, ema, diffusion, optimizer, scheduler, device):
 
 
 def main(conf):
+    wandb = None
+    if dist.is_primary() and conf.evaluate.wandb:
+        wandb = load_wandb()
+        wandb.init(project="denoising diffusion")
+
     device = "cuda"
     beta_schedule = "linear"
 
@@ -127,7 +135,9 @@ def main(conf):
     betas = conf.diffusion.beta_schedule.make()
     diffusion = GaussianDiffusion(betas).to(device)
 
-    train(conf, train_loader, model, ema, diffusion, optimizer, scheduler, device)
+    train(
+        conf, train_loader, model, ema, diffusion, optimizer, scheduler, device, wandb
+    )
 
 
 if __name__ == "__main__":
