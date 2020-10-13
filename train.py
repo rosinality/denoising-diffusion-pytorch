@@ -43,10 +43,15 @@ def train(conf, loader, model, ema, diffusion, optimizer, scheduler, device):
 
     pbar = range(conf.training.n_iter + 1)
 
+    if dist.is_primary():
+        pbar = tqdm(pbar, dynamic_ncols=True)
+
     for i in pbar:
         epoch, img = next(loader)
         img = img.to(device)
-        time = (torch.rand(img.shape[0]) * 1000).type(torch.int64).to(device)
+        time = torch.randint(
+            0, conf.diffusion.beta_schedule.n_timestep, (img.shape[0],), device=device
+        )
         loss = diffusion.p_loss(model, img, time)
         optimizer.zero_grad()
         loss.backward()
@@ -59,9 +64,10 @@ def train(conf, loader, model, ema, diffusion, optimizer, scheduler, device):
         )
 
         if dist.is_primary():
-            if i % conf.evaluate.log_every == 0:
-                lr = optimizer.param_groups[0]["lr"]
-                print(f"epoch: {epoch}; loss: {loss.item():.4f}; lr: {lr:.5f}")
+            lr = optimizer.param_groups[0]["lr"]
+            pbar.set_description(
+                f"epoch: {epoch}; loss: {loss.item():.4f}; lr: {lr:.5f}"
+            )
 
             if i % conf.evaluate.save_every == 0:
                 if conf.distributed:
@@ -84,9 +90,6 @@ def train(conf, loader, model, ema, diffusion, optimizer, scheduler, device):
 def main(conf):
     device = "cuda"
     beta_schedule = "linear"
-    beta_start = 1e-4
-    beta_end = 2e-2
-    n_timestep = 1000
 
     conf.distributed = dist.get_world_size() > 1
 
@@ -106,25 +109,9 @@ def main(conf):
     )
     train_loader = conf.training.dataloader.make(train_set, sampler=train_sampler)
 
-    model = UNet(
-        conf.model.in_channel,
-        conf.model.channel,
-        channel_multiplier=conf.model.channel_multiplier,
-        n_res_blocks=conf.model.n_res_blocks,
-        attn_strides=conf.model.attn_strides,
-        dropout=conf.model.dropout,
-        fold=conf.model.fold,
-    )
+    model = conf.model.make()
     model = model.to(device)
-    ema = UNet(
-        conf.model.in_channel,
-        conf.model.channel,
-        channel_multiplier=conf.model.channel_multiplier,
-        n_res_blocks=conf.model.n_res_blocks,
-        attn_strides=conf.model.attn_strides,
-        dropout=conf.model.dropout,
-        fold=conf.model.fold,
-    )
+    ema = conf.model.make()
     ema = ema.to(device)
 
     if conf.distributed:
@@ -137,11 +124,8 @@ def main(conf):
     optimizer = conf.training.optimizer.make(model.parameters())
     scheduler = conf.training.scheduler.make(optimizer)
 
-    betas = make_beta_schedule(beta_schedule, beta_start, beta_end, n_timestep)
+    betas = conf.diffusion.beta_schedule.make()
     diffusion = GaussianDiffusion(betas).to(device)
-
-    if dist.is_primary():
-        bind_model(conf, model, ema, scheduler)
 
     train(conf, train_loader, model, ema, diffusion, optimizer, scheduler, device)
 

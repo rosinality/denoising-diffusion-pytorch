@@ -1,14 +1,32 @@
+import math
+
 import torch
 from torch import nn
 from torch.nn import functional as F
+from tensorfn.config import config_model
 
 
-def make_beta_schedule(schedule, start, end, n_timestep):
+@config_model()
+def make_beta_schedule(
+    schedule, n_timestep, linear_start=1e-4, linear_end=2e-2, cosine_s=8e-3
+):
     if schedule == "linear":
         betas = (
-            torch.linspace(start ** 0.5, end ** 0.5, n_timestep, dtype=torch.float64)
+            torch.linspace(
+                linear_start ** 0.5, linear_end ** 0.5, n_timestep, dtype=torch.float64
+            )
             ** 2
         )
+
+    elif schedule == "cosine":
+        timesteps = (
+            torch.arange(n_timestep + 1, dtype=torch.float64) / n_timestep + cosine_s
+        )
+        alphas = timesteps / (1 + cosine_s) * math.pi / 2
+        alphas = torch.cos(alphas).pow(2)
+        alphas = alphas / alphas[0]
+        betas = 1 - alphas[1:] / alphas[:-1]
+        betas = betas.clamp(max=0.999)
 
     return betas
 
