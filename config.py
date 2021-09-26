@@ -1,6 +1,13 @@
 from typing import Optional, List
 from pydantic import StrictStr, StrictInt, StrictFloat, StrictBool
-from tensorfn.config import Config, Optimizer, Scheduler, DataLoader, get_model
+from tensorfn.config import (
+    MainConfig,
+    Config,
+    Optimizer,
+    Scheduler,
+    DataLoader,
+    Instance,
+)
 
 import diffusion
 import model
@@ -12,22 +19,8 @@ class Dataset(Config):
     resolution: StrictInt
 
 
-"""class Model(Config):
-    in_channel: StrictInt
-    channel: StrictInt
-    channel_multiplier: List[StrictInt]
-    n_res_blocks: StrictInt
-    attn_strides: List[StrictInt]
-    attn_heads: StrictInt
-    use_affine_time: StrictBool
-    dropout: StrictFloat
-    fold: StrictInt"""
-
-Model = get_model("UNet")
-
-
 class Diffusion(Config):
-    beta_schedule: get_model("make_beta_schedule")
+    beta_schedule: Instance
 
 
 class Training(Config):
@@ -44,16 +37,9 @@ class Eval(Config):
     log_every: StrictInt
 
 
-class DiffusionConfig(Config):
-    n_gpu: Optional[StrictInt]
-    n_machine: Optional[StrictInt]
-    machine_rank: Optional[StrictInt]
-    dist_url: Optional[StrictStr]
-    distributed: Optional[StrictBool]
-    ckpt: Optional[StrictStr]
-
+class DiffusionConfig(MainConfig):
     dataset: Dataset
-    model: Model
+    model: Instance
     diffusion: Diffusion
     training: Training
     evaluate: Eval

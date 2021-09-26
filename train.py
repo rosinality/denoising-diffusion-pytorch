@@ -50,7 +50,10 @@ def train(conf, loader, model, ema, diffusion, optimizer, scheduler, device, wan
         epoch, img = next(loader)
         img = img.to(device)
         time = torch.randint(
-            0, conf.diffusion.beta_schedule.n_timestep, (img.shape[0],), device=device
+            0,
+            conf.diffusion.beta_schedule["n_timestep"],
+            (img.shape[0],),
+            device=device,
         )
         loss = diffusion.p_loss(model, img, time)
         optimizer.zero_grad()
@@ -69,7 +72,7 @@ def train(conf, loader, model, ema, diffusion, optimizer, scheduler, device, wan
                 f"epoch: {epoch}; loss: {loss.item():.4f}; lr: {lr:.5f}"
             )
 
-            if i % conf.evaluate.log_every == 0:
+            if wandb is not None and i % conf.evaluate.log_every == 0:
                 wandb.log({"epoch": epoch, "loss": loss.item(), "lr": lr}, step=i)
 
             if i % conf.evaluate.save_every == 0:
@@ -84,6 +87,7 @@ def train(conf, loader, model, ema, diffusion, optimizer, scheduler, device, wan
                         "model": model_module.state_dict(),
                         "ema": ema.state_dict(),
                         "scheduler": scheduler.state_dict(),
+                        "optimizer": optimizer.state_dict(),
                         "conf": conf,
                     },
                     f"checkpoint/diffusion_{str(i).zfill(6)}.pt",
@@ -131,6 +135,17 @@ def main(conf):
 
     optimizer = conf.training.optimizer.make(model.parameters())
     scheduler = conf.training.scheduler.make(optimizer)
+
+    if conf.ckpt is not None:
+        ckpt = torch.load(conf.ckpt, map_location=lambda storage, loc: storage)
+
+        if conf.distributed:
+            model.module.load_state_dict(ckpt["model"])
+
+        else:
+            model.load_state_dict(ckpt["model"])
+
+        ema.load_state_dict(ckpt["ema"])
 
     betas = conf.diffusion.beta_schedule.make()
     diffusion = GaussianDiffusion(betas).to(device)

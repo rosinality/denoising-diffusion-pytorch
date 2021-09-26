@@ -36,5 +36,5 @@ python train.py --n_gpu [NUMBER OF GPUS FOR TRAINING] --conf config/improved.con
 
 Samples from FFHQ
 
-![Samples from FFHQ 1](doc/diffusion1.png)
-![Samples from FFHQ 2](doc/diffusion2.png)
+![Samples from FFHQ 1](doc/diffusion3.png)
+![Samples from FFHQ 2](doc/diffusion4.png)

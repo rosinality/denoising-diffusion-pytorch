@@ -3,12 +3,14 @@ from typing import List
 
 import torch
 from torch import nn
-from tensorfn.config import config_model
+from torch.nn import functional as F
 from pydantic import StrictInt, StrictFloat, StrictBool
 
 
-def swish(input):
-    return input * torch.sigmoid(input)
+# def swish(input):
+#     return input * torch.sigmoid(input)
+
+swish = F.silu
 
 
 @torch.no_grad()
@@ -262,7 +264,6 @@ def spatial_unfold(input, unfold):
     )
 
 
-@config_model()
 class UNet(nn.Module):
     def __init__(
         self,
