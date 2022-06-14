@@ -24,6 +24,7 @@ class Diffusion(Config):
 
 
 class Training(Config):
+    save_dir: StrictStr
     n_iter: StrictInt
     optimizer: Optimizer
     scheduler: Optional[Scheduler]

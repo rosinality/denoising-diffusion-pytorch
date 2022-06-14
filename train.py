@@ -2,6 +2,7 @@ import os
 
 import torch
 from torch import nn, optim
+from torch.nn import functional as F
 from torch.utils import data
 from torchvision import transforms
 from tensorfn import load_arg_config, load_wandb
@@ -14,6 +15,8 @@ from diffusion import GaussianDiffusion, make_beta_schedule
 from dataset import MultiResolutionDataset
 from config import DiffusionConfig
 
+# ArcFace
+from recog_backbones import get_recog
 
 def sample_data(loader):
     loader_iter = iter(loader)
@@ -37,8 +40,13 @@ def accumulate(model1, model2, decay=0.9999):
     for k in par1.keys():
         par1[k].data.mul_(decay).add_(par2[k].data, alpha=1 - decay)
 
+def get_id_from_image(embedder, img):
+    img = (img + 1) / 2
+    img = F.interpolate(img, scale_factor=112/img.shape[-1])
+    id = embedder(img)
+    return id
 
-def train(conf, loader, model, ema, diffusion, optimizer, scheduler, device, wandb):
+def train(conf, loader, model, ema, diffusion, embedder, optimizer, scheduler, device, wandb):
     loader = sample_data(loader)
 
     pbar = range(conf.training.n_iter + 1)
@@ -49,13 +57,14 @@ def train(conf, loader, model, ema, diffusion, optimizer, scheduler, device, wan
     for i in pbar:
         epoch, img = next(loader)
         img = img.to(device)
+        id = get_id_from_image(embedder, img)
         time = torch.randint(
             0,
             conf.diffusion.beta_schedule["n_timestep"],
             (img.shape[0],),
             device=device,
         )
-        loss = diffusion.p_loss(model, img, time)
+        loss = diffusion.p_loss(model, img, time, id)
         optimizer.zero_grad()
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), 1)
@@ -82,6 +91,7 @@ def train(conf, loader, model, ema, diffusion, optimizer, scheduler, device, wan
                 else:
                     model_module = model
 
+                save_file = os.path.join(conf.training.save_dir, f"diffusion_{str(i).zfill(6)}.pt")
                 torch.save(
                     {
                         "model": model_module.state_dict(),
@@ -90,7 +100,7 @@ def train(conf, loader, model, ema, diffusion, optimizer, scheduler, device, wan
                         "optimizer": optimizer.state_dict(),
                         "conf": conf,
                     },
-                    f"checkpoint/diffusion_{str(i).zfill(6)}.pt",
+                    save_file
                 )
 
 
@@ -132,6 +142,14 @@ def main(conf):
             device_ids=[dist.get_local_rank()],
             output_device=dist.get_local_rank(),
         )
+        
+    # ArcFace 모델로드
+    Arc_path       = 'embedder_model/partial_fc_glint360k_r100.pth'
+    resnet_name    = Arc_path.split('_')[-1].split('.')[0]
+    embedder       = get_recog(resnet_name, fp16=False) # get_recog 함수에서 r100, r50 등의 입력으로 모델 구조를 결정
+    embedder.load_state_dict(torch.load(Arc_path))
+    embedder       = embedder.to(device)
+    embedder.eval()
 
     optimizer = conf.training.optimizer.make(model.parameters())
     scheduler = conf.training.scheduler.make(optimizer)
@@ -151,7 +169,7 @@ def main(conf):
     diffusion = GaussianDiffusion(betas).to(device)
 
     train(
-        conf, train_loader, model, ema, diffusion, optimizer, scheduler, device, wandb
+        conf, train_loader, model, ema, diffusion, embedder, optimizer, scheduler, device, wandb
     )
 
 

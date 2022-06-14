@@ -103,12 +103,12 @@ class GaussianDiffusion(nn.Module):
             + extract(self.sqrt_one_minus_alphas_cumprod, t, x_0.shape) * noise
         )
 
-    def p_loss(self, model, x_0, t, noise=None):
+    def p_loss(self, model, x_0, t, id, noise=None):
         if noise is None:
             noise = torch.randn_like(x_0)
 
         x_noise = self.q_sample(x_0, t, noise)
-        x_recon = model(x_noise, t)
+        x_recon = model(x_noise, t, id)
 
         return F.mse_loss(x_recon, noise)
 
@@ -128,8 +128,8 @@ class GaussianDiffusion(nn.Module):
 
         return mean, var, log_var_clipped
 
-    def p_mean_variance(self, model, x, t, clip_denoised):
-        x_recon = self.predict_start_from_noise(x, t, noise=model(x, t))
+    def p_mean_variance(self, model, x, t, id, clip_denoised):
+        x_recon = self.predict_start_from_noise(x, t, noise=model(x, t, id))
 
         if clip_denoised:
             x_recon = x_recon.clamp(min=-1, max=1)
